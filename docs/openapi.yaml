@@ -1,0 +1,266 @@
+openapi: 3.0.3
+info:
+  title: API de Pagamentos de Imóveis - Hands on Work VII
+  description: >
+    Serviços REST (backend) que processam, em memória e com programação
+    funcional (map/filter/reduce/forEach), os dados de pagamentos de imóveis
+    que alimentam os três painéis gráficos da aplicação cliente (frontend,
+    fora do escopo deste contrato):
+    
+    * gráfico "a" (barras) - valor acumulado de pagamentos por imóvel
+    * gráfico "b" (linhas/dispersão) - total de vendas por mês/ano
+    * gráfico "c" (pizza) - percentual de vendas por tipo de imóvel
+    
+    Os dados de origem provêm de uma única consulta SQL com JOIN entre as
+    tabelas pagamento, imovel e tipo_imovel (Parte 1, itens d e e). Nenhuma
+    das rotas de agregação utiliza WHERE ou GROUP BY - a série histórica é
+    carregada integralmente em memória e todo o processamento ocorre em
+    JavaScript.
+    
+    Contexto de extensão: projeto NAM (Núcleo de Apoio ao Migrante) da
+    UNIVALI - os dados apoiam a identificação de regiões de Santa Catarina
+    com maior viabilidade de moradia ou trabalho para migrantes em processo
+    de regularização documental.
+  version: "1.0.0"
+  contact:
+    name: Curso de Análise e Desenvolvimento de Sistemas - UNIVALI
+servers:
+  - url: http://localhost:3000
+    description: Ambiente de desenvolvimento local
+
+tags:
+  - name: Parte 1
+    description: >
+      Serviço implementado na Entrega 1, que devolve o resultado bruto da
+      consulta com JOIN (item e do enunciado).
+  - name: Parte 2
+    description: >
+      Os três serviços de agregação exigidos pelo enunciado (itens a, b, c e d
+      da Parte 2). Cada um alimenta um dos três gráficos do painel.
+
+paths:
+  /api/pagamentos-completo:
+    get:
+      tags: [Parte 1]
+      summary: Série histórica completa de pagamentos (item e)
+      description: >
+        Executa a consulta com JOIN definida no item (d) e devolve o resultado
+        integral, sem filtros nem agregações. É a fonte de dados única
+        consumida pelos três serviços da Parte 2.
+      operationId: getPagamentosCompleto
+      responses:
+        "200":
+          description: Lista completa de pagamentos com dados do imóvel e do tipo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pagamento"
+              example:
+                - id_venda: 1
+                  data_do_pagamento: "2023-03-10"
+                  valor_do_pagamento: 5000
+                  codigo_imovel: 1
+                  descricao_imovel: "Apartamento 100 m² em condomínio fechado"
+                  tipo_imovel: "Apartamento"
+                - id_venda: 2
+                  data_do_pagamento: "2023-05-10"
+                  valor_do_pagamento: 5000
+                  codigo_imovel: 1
+                  descricao_imovel: "Apartamento 100 m² em condomínio fechado"
+                  tipo_imovel: "Apartamento"
+        "500":
+          $ref: "#/components/responses/ErroInterno"
+
+  /api/pagamentos-por-imovel:
+    get:
+      tags: [Parte 2]
+      summary: Soma de pagamentos por imóvel (gráfico "a" - barras)
+      description: >
+        Retorna, para cada imóvel, o seu código e a soma de todos os seus
+        pagamentos, considerando toda a série histórica. Calculado em
+        JavaScript com reduce a partir dos dados brutos do item (e) - nenhuma
+        agregação é feita no SQL.
+      operationId: getPagamentosPorImovel
+      responses:
+        "200":
+          description: Total acumulado de pagamentos de cada imóvel.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PagamentoPorImovel"
+              example:
+                - codigo_imovel: 1
+                  total_pagamentos: 20000
+                - codigo_imovel: 2
+                  total_pagamentos: 9600
+                - codigo_imovel: 3
+                  total_pagamentos: 18000
+        "500":
+          $ref: "#/components/responses/ErroInterno"
+
+  /api/vendas-por-mes:
+    get:
+      tags: [Parte 2]
+      summary: Total de vendas por mês/ano (gráfico "b" - linhas/dispersão)
+      description: >
+        Retorna, para cada mês/ano presente na base, o valor total das vendas
+        ocorridas no período. Calculado em JavaScript com reduce a partir dos
+        dados brutos do item (e) - nenhum GROUP BY é feito no SQL.
+      operationId: getVendasPorMes
+      responses:
+        "200":
+          description: Total de vendas de cada mês/ano.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VendaPorMes"
+              example:
+                - mes_ano: "03/2023"
+                  total_vendas: 24700
+                - mes_ano: "04/2023"
+                  total_vendas: 24500
+                - mes_ano: "05/2023"
+                  total_vendas: 21500
+        "500":
+          $ref: "#/components/responses/ErroInterno"
+
+  /api/percentual-por-tipo:
+    get:
+      tags: [Parte 2]
+      summary: Percentual de vendas por tipo de imóvel (gráfico "c" - pizza)
+      description: >
+        Retorna, para cada tipo de imóvel cadastrado, o percentual do valor
+        total de vendas que ele representa, considerando toda a série
+        histórica. Calculado em JavaScript com map/filter/reduce a partir dos
+        dados brutos do item (e). A soma dos percentuais de todos os tipos
+        totaliza 100%.
+      operationId: getPercentualPorTipo
+      responses:
+        "200":
+          description: Percentual de participação de cada tipo de imóvel.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PercentualPorTipo"
+              example:
+                - tipo_imovel: "Apartamento"
+                  percentual: 34.95
+                - tipo_imovel: "Casa"
+                  percentual: 25.62
+                - tipo_imovel: "Sala Comercial"
+                  percentual: 15.94
+                - tipo_imovel: "Galpão"
+                  percentual: 14.95
+                - tipo_imovel: "Terreno"
+                  percentual: 8.54
+        "500":
+          $ref: "#/components/responses/ErroInterno"
+
+components:
+  schemas:
+    Pagamento:
+      type: object
+      description: Registro do resultado da consulta com JOIN entre as três tabelas.
+      properties:
+        id_venda:
+          type: integer
+          description: Identificador do pagamento (chave primária).
+          example: 1
+        data_do_pagamento:
+          type: string
+          format: date
+          description: Data do pagamento no formato AAAA-MM-DD.
+          example: "2023-03-10"
+        valor_do_pagamento:
+          type: number
+          format: double
+          description: Valor do pagamento em reais.
+          example: 5000
+        codigo_imovel:
+          type: integer
+          description: Código do imóvel ao qual o pagamento se refere.
+          example: 1
+        descricao_imovel:
+          type: string
+          description: Descrição do imóvel.
+          example: "Apartamento 100 m² em condomínio fechado"
+        tipo_imovel:
+          type: string
+          description: Modalidade do imóvel.
+          example: "Apartamento"
+      required:
+        - id_venda
+        - data_do_pagamento
+        - valor_do_pagamento
+        - codigo_imovel
+        - descricao_imovel
+        - tipo_imovel
+
+    PagamentoPorImovel:
+      type: object
+      description: Total acumulado de pagamentos de um único imóvel.
+      properties:
+        codigo_imovel:
+          type: integer
+          description: Código (chave) do imóvel.
+          example: 1
+        total_pagamentos:
+          type: number
+          format: double
+          description: Soma de todos os pagamentos recebidos por esse imóvel.
+          example: 20000
+      required: [codigo_imovel, total_pagamentos]
+
+    VendaPorMes:
+      type: object
+      description: Total de vendas (pagamentos) ocorridas em um mês/ano.
+      properties:
+        mes_ano:
+          type: string
+          description: Mês e ano no formato MM/AAAA.
+          example: "08/2023"
+        total_vendas:
+          type: number
+          format: double
+          description: Soma dos pagamentos ocorridos nesse mês/ano.
+          example: 27300
+      required: [mes_ano, total_vendas]
+
+    PercentualPorTipo:
+      type: object
+      description: Participação percentual de um tipo de imóvel no total de vendas.
+      properties:
+        tipo_imovel:
+          type: string
+          description: Modalidade do imóvel.
+          example: "Apartamento"
+        percentual:
+          type: number
+          format: double
+          description: Percentual (0 a 100) do valor total de vendas.
+          example: 34.95
+      required: [tipo_imovel, percentual]
+
+    ErroPadrao:
+      type: object
+      properties:
+        erro:
+          type: string
+          example: "Erro ao consultar o banco de dados."
+      required: [erro]
+
+  responses:
+    ErroInterno:
+      description: Erro inesperado no servidor, como falha de conexão com o banco.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErroPadrao"
